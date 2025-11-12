@@ -29,14 +29,21 @@ app.use('/', authRouter);
 app.use('/', markRouter);
 
 const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 4000;
 
 (async () => {
   try {
     await initDb();
-    console.log('DB initialized');
-    app.listen(PORT, () => console.log('Backend running on :' + PORT));
+    console.log('✅ Base de datos inicializada correctamente');
+    
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`🚀 Servidor corriendo en el puerto ${PORT}`);
+    });
+    
   } catch (e) {
-    console.error('Failed to start:', e);
+    console.error('❌ Error al iniciar el servidor:', e);
     process.exit(1);
   }
 })();
+
+
