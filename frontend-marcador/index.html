@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Marcación de Asistencia</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>Marcación por Huella</h1>
+
+    <section id="register">
+      <h2>Registrar huella en este dispositivo</h2>
+      <input id="reg-username" placeholder="usuario (ej: jpatino)" />
+      <input id="reg-display" placeholder="Nombre a mostrar" />
+      <button id="btn-register">Registrar</button>
+      <p id="reg-status"></p>
+    </section>
+
+    <section id="auth">
+      <h2>Autenticarse y Marcar</h2>
+      <input id="auth-username" placeholder="usuario" />
+      <button id="btn-auth">Marcar asistencia</button>
+      <p id="auth-status"></p>
+      <div id="map" class="map"></div>
+    </section>
+  </main>
+
+  <script>
+    window.APP_CONFIG = {
+      BACKEND: 'https://TU_BACKEND.onrender.com',
+      ORIGIN: window.location.origin + window.location.pathname.replace(/\/$/, '')
+    };
+  </script>
+  <script src="app.js"></script>
+</body>
+</html>

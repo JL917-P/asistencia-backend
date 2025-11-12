@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Centro de Control de Asistencia</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <h1>Centro de Control</h1>
+    <section>
+      <div class="filters">
+        <input id="f-user" placeholder="Empleado (nombre)" />
+        <input id="f-from" type="date" />
+        <input id="f-to" type="date" />
+        <button id="btn-load">Cargar</button>
+        <button id="btn-export">Exportar CSV</button>
+      </div>
+    </section>
+
+    <section>
+      <div id="map-wrap" class="map"></div>
+    </section>
+
+    <section>
+      <table id="tbl">
+        <thead><tr><th>Fecha/Hora</th><th>Empleado</th><th>Lat</th><th>Lon</th><th>IP</th><th>Dispositivo</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    window.APP_CONFIG = {
+      BACKEND: 'https://TU_BACKEND.onrender.com'
+    };
+  </script>
+  <script src="admin.js"></script>
+</body>
+</html>
