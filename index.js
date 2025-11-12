@@ -33,6 +33,8 @@ const PORT = process.env.PORT || 4000;
 
 (async () => {
   try {
+    console.log("Connecting to DB:", process.env.DATABASE_URL);
+
     await initDb();
     console.log('✅ Base de datos inicializada correctamente');
     
