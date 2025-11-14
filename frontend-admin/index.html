@@ -25,17 +25,25 @@
 
     <section>
       <table id="tbl">
-        <thead><tr><th>Fecha/Hora</th><th>Empleado</th><th>Lat</th><th>Lon</th><th>IP</th><th>Dispositivo</th></tr></thead>
+        <thead>
+          <tr>
+            <th>Fecha/Hora</th>
+            <th>Empleado</th>
+            <th>Lat</th>
+            <th>Lon</th>
+            <th>IP</th>
+            <th>Dispositivo</th>
+          </tr>
+        </thead>
         <tbody></tbody>
       </table>
     </section>
   </main>
 
-  <script>
-    window.APP_CONFIG = {
-      BACKEND: 'https://TU_BACKEND.onrender.com'
-    };
-  </script>
+  <!-- Cargar primero la configuración -->
+  <script src="config.js"></script>
+
+  <!-- Luego el código principal -->
   <script src="admin.js"></script>
 </body>
 </html>
