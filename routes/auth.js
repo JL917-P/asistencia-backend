@@ -11,24 +11,32 @@ import {
 const router = express.Router();
 
 /* -----------------------------------------------------------
-   Normalización de username
+   Normalización robusta de username
 ----------------------------------------------------------- */
 const normalizeUsername = u =>
   (u || "")
     .trim()
     .toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, "");
 
 /* -----------------------------------------------------------
-   Fijar RP_ID y ORIGEN sin saltos de línea
+   CONFIGURACIÓN WEB AUTHN
 ----------------------------------------------------------- */
 const clean = v => (v || "").trim().replace(/\n/g, "");
-const RP_ID = clean(process.env.RP_ID);
-const EMP_ORIGIN = clean(process.env.EMPLOYEE_ORIGIN_FULL);
+
+// RP_ID será EL FRONTEND SIN "https://"
+const FRONTEND_FULL = clean(process.env.EMPLOYEE_ORIGIN_FULL);
+const RP_ID = FRONTEND_FULL.replace('https://', '').replace('/', '');
+
+// ORIGIN EXACTO del FRONTEND
+const EXPECTED_ORIGIN = FRONTEND_FULL;
+
+// UUID
 const makeUUID = () => crypto.randomUUID();
 
-/* Storage temporal */
+// Storage temporal de challenges
 const regChallenges = new Map();
 const authChallenges = new Map();
 
@@ -43,14 +51,14 @@ router.post('/register-begin', async (req, res) => {
     if (!username)
       return res.status(400).json({ error: 'username required' });
 
-    const u = await pool.query(
+    const user = await pool.query(
       'SELECT * FROM users WHERE LOWER(username)=LOWER($1)',
       [username]
     );
 
     let userId;
-    if (u.rows.length) {
-      userId = u.rows[0].id;
+    if (user.rows.length) {
+      userId = user.rows[0].id;
     } else {
       userId = makeUUID();
       await pool.query(
@@ -59,12 +67,12 @@ router.post('/register-begin', async (req, res) => {
       );
     }
 
-    const creds = await pool.query(
+    const storedCreds = await pool.query(
       'SELECT credential_id FROM credentials WHERE user_id=$1',
       [userId]
     );
 
-    const exclude = creds.rows.map(r => ({
+    const exclude = storedCreds.rows.map(r => ({
       id: Buffer.from(r.credential_id, 'base64url'),
       type: 'public-key',
     }));
@@ -95,13 +103,14 @@ router.post('/register-begin', async (req, res) => {
 =========================================================== */
 router.post('/register-complete', async (req, res) => {
   try {
-    const { userId, attestation, origin } = req.body;
+    const { userId, attestation } = req.body;
+
     const expectedChallenge = regChallenges.get(userId);
 
     const verification = await verifyRegistrationResponse({
       response: attestation,
       expectedChallenge,
-      expectedOrigin: origin || EMP_ORIGIN,
+      expectedOrigin: EXPECTED_ORIGIN,
       expectedRPID: RP_ID,
     });
 
@@ -114,7 +123,8 @@ router.post('/register-complete', async (req, res) => {
     const credIdBase64 = Buffer.from(credentialID).toString('base64url');
 
     await pool.query(
-      `INSERT INTO credentials (id, user_id, credential_id, public_key, sign_count)
+      `INSERT INTO credentials
+        (id, user_id, credential_id, public_key, sign_count)
        VALUES ($1,$2,$3,$4,$5)
        ON CONFLICT (credential_id) DO UPDATE
        SET public_key=$4, sign_count=$5`,
@@ -145,15 +155,15 @@ router.post('/auth-begin', async (req, res) => {
     let { username } = req.body;
     username = normalizeUsername(username);
 
-    const u = await pool.query(
+    const result = await pool.query(
       'SELECT * FROM users WHERE LOWER(username)=LOWER($1)',
       [username]
     );
 
-    if (!u.rows.length)
+    if (!result.rows.length)
       return res.status(404).json({ error: 'user not found' });
 
-    const userId = u.rows[0].id;
+    const userId = result.rows[0].id;
 
     const rows = await pool.query(
       'SELECT credential_id FROM credentials WHERE user_id=$1',
@@ -166,9 +176,9 @@ router.post('/auth-begin', async (req, res) => {
     }));
 
     const options = generateAuthenticationOptions({
-      timeout: 60000,
       rpID: RP_ID,
       allowCredentials,
+      timeout: 60000,
       userVerification: 'preferred',
     });
 
@@ -177,7 +187,7 @@ router.post('/auth-begin', async (req, res) => {
     return res.json({
       options,
       userId,
-      displayName: u.rows[0].display_name,
+      displayName: result.rows[0].display_name,
     });
 
   } catch (e) {
@@ -191,24 +201,24 @@ router.post('/auth-begin', async (req, res) => {
 =========================================================== */
 router.post('/auth-complete', async (req, res) => {
   try {
-    const { userId, assertion, origin } = req.body;
+    const { userId, assertion } = req.body;
 
-    const cred = await pool.query(
+    const rows = await pool.query(
       'SELECT * FROM credentials WHERE user_id=$1 LIMIT 1',
       [userId]
     );
 
-    if (!cred.rows.length)
+    if (!rows.rows.length)
       return res.status(404).json({ error: 'credential not found' });
 
     const expectedChallenge = authChallenges.get(userId);
 
-    const { sign_count, public_key, credential_id, id } = cred.rows[0];
+    const { sign_count, public_key, credential_id, id } = rows.rows[0];
 
     const verification = await verifyAuthenticationResponse({
       response: assertion,
       expectedChallenge,
-      expectedOrigin: origin || EMP_ORIGIN,
+      expectedOrigin: EXPECTED_ORIGIN,
       expectedRPID: RP_ID,
       authenticator: {
         credentialID: Buffer.from(credential_id, 'base64url'),
@@ -237,5 +247,4 @@ router.post('/auth-complete', async (req, res) => {
   }
 });
 
-/* EXPORT */
 export default router;
