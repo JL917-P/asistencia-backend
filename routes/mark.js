@@ -5,19 +5,19 @@ import { pool } from '../db.js';
 const router = express.Router();
 
 /* -----------------------------------------------------------
-   Generar ID universal
+   Generar ID universal seguro
 ----------------------------------------------------------- */
 const makeUUID = () => crypto.randomUUID();
 
-/* Sanear strings para evitar null, undefined, espacios, etc */
+/* Limpieza de strings */
 const clean = v =>
   (v === undefined || v === null)
     ? null
     : String(v).trim();
 
-/* -----------------------------------------------------------
-   REGISTRO DE MARCACIÓN DE ASISTENCIA
------------------------------------------------------------ */
+/* ===========================================================
+   1. REGISTRO DE MARCACIÓN DE ASISTENCIA
+=========================================================== */
 router.post('/mark', async (req, res) => {
   try {
     let { userId, displayName, latitude, longitude, accuracy } = req.body;
@@ -30,7 +30,7 @@ router.post('/mark', async (req, res) => {
     if (!userId)
       return res.status(400).json({ error: 'userId is required' });
 
-    // Confirmar que existe usuario
+    // Confirmar que el usuario existe
     const u = await pool.query(
       'SELECT * FROM users WHERE id=$1',
       [userId]
@@ -47,7 +47,6 @@ router.post('/mark', async (req, res) => {
     const lon = longitude !== undefined ? Number(longitude) : null;
     const acc = accuracy !== undefined ? Number(accuracy) : null;
 
-    // Evitar guardar números inválidos
     const safeLat = isNaN(lat) ? null : lat;
     const safeLon = isNaN(lon) ? null : lon;
     const safeAcc = isNaN(acc) ? null : acc;
@@ -89,5 +88,30 @@ router.post('/mark', async (req, res) => {
   }
 });
 
-/* EXPORTAR */
+/* ===========================================================
+   2. LISTADO SEGURO DE TODAS LAS MARCACIONES
+=========================================================== */
+router.get('/marks-list', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, user_id, display_name, latitude, longitude, accuracy, timestamp
+       FROM marks
+       ORDER BY timestamp DESC`
+    );
+
+    return res.json({
+      ok: true,
+      count: result.rows.length,
+      marks: result.rows
+    });
+
+  } catch (e) {
+    console.error("❌ Error en /marks-list:", e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+/* -----------------------------------------------------------
+   EXPORTAR RUTA
+----------------------------------------------------------- */
 export default router;
