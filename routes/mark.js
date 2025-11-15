@@ -9,6 +9,12 @@ const router = express.Router();
 ----------------------------------------------------------- */
 const makeUUID = () => crypto.randomUUID();
 
+/* Sanear strings para evitar null, undefined, espacios, etc */
+const clean = v =>
+  (v === undefined || v === null)
+    ? null
+    : String(v).trim();
+
 /* -----------------------------------------------------------
    REGISTRO DE MARCACIÓN DE ASISTENCIA
 ----------------------------------------------------------- */
@@ -16,11 +22,15 @@ router.post('/mark', async (req, res) => {
   try {
     let { userId, displayName, latitude, longitude, accuracy } = req.body;
 
-    // Validar userId
+    /* -------- VALIDACIONES -------- */
+
+    userId = clean(userId);
+    displayName = clean(displayName);
+
     if (!userId)
       return res.status(400).json({ error: 'userId is required' });
 
-    // Confirmar que el usuario existe
+    // Confirmar que existe usuario
     const u = await pool.query(
       'SELECT * FROM users WHERE id=$1',
       [userId]
@@ -29,22 +39,35 @@ router.post('/mark', async (req, res) => {
     if (!u.rows.length)
       return res.status(404).json({ error: 'user not found' });
 
-    // Crear timestamp ISO
+    const realName = displayName || u.rows[0].display_name;
+
+    /* -------- NORMALIZAR UBICACIÓN -------- */
+
+    const lat = latitude !== undefined ? Number(latitude) : null;
+    const lon = longitude !== undefined ? Number(longitude) : null;
+    const acc = accuracy !== undefined ? Number(accuracy) : null;
+
+    // Evitar guardar números inválidos
+    const safeLat = isNaN(lat) ? null : lat;
+    const safeLon = isNaN(lon) ? null : lon;
+    const safeAcc = isNaN(acc) ? null : acc;
+
+    /* -------- TIMESTAMP -------- */
     const ts = new Date().toISOString();
 
-    // Insertar marcación
+    /* -------- INSERTAR MARCACIÓN -------- */
     const insert = await pool.query(
       `INSERT INTO marks
-       (id, user_id, display_name, latitude, longitude, accuracy, timestamp)
+        (id, user_id, display_name, latitude, longitude, accuracy, timestamp)
        VALUES ($1,$2,$3,$4,$5,$6,$7)
        RETURNING *`,
       [
         makeUUID(),
         userId,
-        displayName || u.rows[0].display_name,
-        latitude || null,
-        longitude || null,
-        accuracy || null,
+        realName,
+        safeLat,
+        safeLon,
+        safeAcc,
         ts
       ]
     );
@@ -52,7 +75,12 @@ router.post('/mark', async (req, res) => {
     return res.json({
       ok: true,
       timestamp: insert.rows[0].timestamp,
-      displayName: insert.rows[0].display_name
+      displayName: realName,
+      location: {
+        latitude: safeLat,
+        longitude: safeLon,
+        accuracy: safeAcc
+      }
     });
 
   } catch (e) {
