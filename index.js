@@ -15,22 +15,28 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 
 // ================================================================
-// CORS CONFIG – SOLO PERMITIR LOS FRONTENDS OFICIALES
+// CORS CONFIG – PERMITIR SOLO LOS FRONTENDS OFICIALES
 // ================================================================
 const allowedOrigins = [
   process.env.EMPLOYEE_ORIGIN_FULL, // frontend-marcador
   process.env.ADMIN_ORIGIN_FULL     // frontend-admin
 ];
 
+// Normalizar orígenes (evita errores por espacios o saltos de línea)
+const clean = v => (v || "").trim().replace(/\n/g, "");
+const ALLOWED = allowedOrigins.map(clean);
+
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Permitir peticiones sin origin (POSTMAN, CURL)
+      // Permitir peticiones internas (Postman, cURL, navegador)
       if (!origin) return callback(null, true);
 
-      if (allowedOrigins.includes(origin)) {
+      if (ALLOWED.includes(origin)) {
         return callback(null, true);
       }
+
+      console.log("⛔ CORS bloqueado para origin:", origin);
       return callback(new Error(`CORS blocked for origin: ${origin}`));
     },
     methods: ['POST', 'GET', 'OPTIONS'],
@@ -38,6 +44,17 @@ app.use(
     credentials: true
   })
 );
+
+// ================================================================
+// PRE-FLIGHT PARA TODOS LOS ENDPOINTS (NECESARIO PARA RENDER)
+// ================================================================
+app.options('*', (req, res) => {
+  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.sendStatus(200);
+});
 
 // ================================================================
 // RUTA BACKEND STATUS
