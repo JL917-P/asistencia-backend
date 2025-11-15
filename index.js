@@ -15,26 +15,27 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 
 // ================================================================
-// CORS CONFIG – PERMITIR SOLO LOS FRONTENDS OFICIALES
+// CORS – SOLO PERMITIR TUS DOS FRONTENDS OFICIALES
 // ================================================================
 const allowedOrigins = [
-  process.env.EMPLOYEE_ORIGIN_FULL, // frontend-marcador
-  process.env.ADMIN_ORIGIN_FULL     // frontend-admin
+  process.env.EMPLOYEE_ORIGIN_FULL, // https://asistencia-frontend-marcador.onrender.com
+  process.env.ADMIN_ORIGIN_FULL     // https://asistencia-frontend-admin.onrender.com
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Permitir peticiones sin origin (POSTMAN, CURL)
-      if (!origin) return callback(null, true);
+      if (!origin) return callback(null, true); // Postman, CURL
 
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-      return callback(new Error(`CORS blocked for origin: ${origin}`));
+
+      console.log("❌ CORS blocked:", origin);
+      return callback(new Error("CORS blocked for: " + origin));
     },
-    methods: ['POST', 'GET', 'OPTIONS'],
-    allowedHeaders: ['Content-Type'],
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type"],
     credentials: true
   })
 );
@@ -51,9 +52,9 @@ app.get('/', (_req, res) =>
 );
 
 // ================================================================
-// DEBUG DE VARIABLES PARA VERIFICAR CONFIG EN RENDER
+// DEBUG ENV
 // ================================================================
-app.get("/debug-env", (req, res) => {
+app.get("/debug-env", (_req, res) => {
   res.json({
     RP_ID: process.env.RP_ID,
     EMPLOYEE_ORIGIN_FULL: process.env.EMPLOYEE_ORIGIN_FULL,
@@ -62,19 +63,6 @@ app.get("/debug-env", (req, res) => {
     DATABASE_URL: process.env.DATABASE_URL ? "OK" : "MISSING"
   });
 });
-// Fix total CORS
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.header("Access-Control-Allow-Credentials", "true");
-
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-  next();
-});
-
 
 // ================================================================
 // RUTAS PRINCIPALES
@@ -83,7 +71,7 @@ app.use('/', authRouter);
 app.use('/', markRouter);
 
 // ================================================================
-// INICIAR SERVIDOR (Render requiere 0.0.0.0)
+// INICIAR SERVIDOR
 // ================================================================
 const port = Number(process.env.PORT) || 4000;
 
