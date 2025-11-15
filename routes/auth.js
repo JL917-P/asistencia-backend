@@ -22,16 +22,22 @@ const normalizeUsername = u =>
     .replace(/\s+/g, "");
 
 /* -----------------------------------------------------------
-   CONFIGURACIÓN WEB AUTHN
+   CONFIGURACIÓN WEB AUTHN FINAL
 ----------------------------------------------------------- */
 const clean = v => (v || "").trim().replace(/\n/g, "");
 
-// RP_ID será EL FRONTEND SIN "https://"
-const FRONTEND_FULL = clean(process.env.EMPLOYEE_ORIGIN_FULL);
-const RP_ID = FRONTEND_FULL.replace('https://', '').replace('/', '');
+// FRONTEND EXACTO
+const EXPECTED_ORIGIN = clean(process.env.EMPLOYEE_ORIGIN_FULL);
 
-// ORIGIN EXACTO del FRONTEND
-const EXPECTED_ORIGIN = FRONTEND_FULL;
+// RP_ID extraído correctamente (SOLO DOMINIO)
+const RP_ID = EXPECTED_ORIGIN
+  .replace("https://", "")
+  .replace("http://", "")
+  .split("/")[0]; 		// ← EVITA TODOS LOS ERRORES
+
+console.log("🔎 WebAuthn config:");
+console.log("   ORIGIN:", EXPECTED_ORIGIN);
+console.log("   RP_ID :", RP_ID);
 
 // UUID
 const makeUUID = () => crypto.randomUUID();
