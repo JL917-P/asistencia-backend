@@ -26,6 +26,15 @@ const port = Number(process.env.PORT) || 4000;
     console.log('Connecting to DB:', process.env.DATABASE_URL);
     await initDb();
     console.log('✅ Base de datos inicializada correctamente');
+app.get('/debug-env', (req, res) => {
+  res.json({
+    RP_ID: process.env.RP_ID,
+    ORIGIN: process.env.ORIGIN,
+    EMPLOYEE_ORIGIN_FULL: process.env.EMPLOYEE_ORIGIN_FULL,
+    ADMIN_ORIGIN_FULL: process.env.ADMIN_ORIGIN_FULL,
+  });
+});
+
     // Escucha en 0.0.0.0 para Render
     app.listen(port, '0.0.0.0', () => console.log(`🚀 Backend running on :${port}`));
   } catch (e) {
