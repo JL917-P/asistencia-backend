@@ -62,6 +62,19 @@ app.get("/debug-env", (req, res) => {
     DATABASE_URL: process.env.DATABASE_URL ? "OK" : "MISSING"
   });
 });
+// Fix total CORS
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.header("Access-Control-Allow-Credentials", "true");
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 
 // ================================================================
 // RUTAS PRINCIPALES
