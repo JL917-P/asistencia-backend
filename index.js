@@ -15,27 +15,26 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 
 // ================================================================
-// CORS – SOLO PERMITIR TUS DOS FRONTENDS OFICIALES
+// CORS CONFIG – SOLO PERMITIR LOS FRONTENDS OFICIALES
 // ================================================================
 const allowedOrigins = [
-  process.env.EMPLOYEE_ORIGIN_FULL, // https://asistencia-frontend-marcador.onrender.com
-  process.env.ADMIN_ORIGIN_FULL     // https://asistencia-frontend-admin.onrender.com
+  process.env.EMPLOYEE_ORIGIN_FULL, // frontend-marcador
+  process.env.ADMIN_ORIGIN_FULL     // frontend-admin
 ];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true); // Postman, CURL
+      // Permitir peticiones sin origin (POSTMAN, CURL)
+      if (!origin) return callback(null, true);
 
       if (allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-
-      console.log("❌ CORS blocked:", origin);
-      return callback(new Error("CORS blocked for: " + origin));
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
     },
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type"],
+    methods: ['POST', 'GET', 'OPTIONS'],
+    allowedHeaders: ['Content-Type'],
     credentials: true
   })
 );
@@ -52,9 +51,9 @@ app.get('/', (_req, res) =>
 );
 
 // ================================================================
-// DEBUG ENV
+// DEBUG DE VARIABLES PARA VERIFICAR CONFIG EN RENDER
 // ================================================================
-app.get("/debug-env", (_req, res) => {
+app.get("/debug-env", (req, res) => {
   res.json({
     RP_ID: process.env.RP_ID,
     EMPLOYEE_ORIGIN_FULL: process.env.EMPLOYEE_ORIGIN_FULL,
@@ -71,7 +70,7 @@ app.use('/', authRouter);
 app.use('/', markRouter);
 
 // ================================================================
-// INICIAR SERVIDOR
+// INICIAR SERVIDOR (Render requiere 0.0.0.0)
 // ================================================================
 const port = Number(process.env.PORT) || 4000;
 
