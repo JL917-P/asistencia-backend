@@ -1,35 +1,56 @@
 const { BACKEND, ORIGIN } = window.APP_CONFIG;
+
 let attemptCounter = 0;
 const MAX_ATTEMPTS = 5;
 const $ = s => document.querySelector(s);
 
-// Normalización segura de username
+// Normalización robusta
 const normalizeUsername = u =>
-  u.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,'');
+  (u || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .replace(/\s+/g,'');
 
+// Conversión Base64URL segura
 function bufToBase64Url(buffer){
+  if (!buffer) return "";
   return btoa(String.fromCharCode(...new Uint8Array(buffer)))
-    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+    .replace(/\+/g,'-')
+    .replace(/\//g,'_')
+    .replace(/=/g,'');
 }
+
 function base64UrlToBuf(base64url){
-  const pad = base64url.length%4===0?'':'='.repeat(4-base64url.length%4);
-  const base64 = base64url.replace(/-/g,'+').replace(/_/g,'/')+pad;
+  if (!base64url || typeof base64url !== "string") return new ArrayBuffer(0);
+
+  const pad = base64url.length % 4 === 0 ? '' : '='.repeat(4 - base64url.length % 4);
+  const base64 = base64url.replace(/-/g,'+').replace(/_/g,'/') + pad;
+
   const str = atob(base64);
   const bytes = new Uint8Array(str.length);
-  for(let i=0;i<str.length;i++) bytes[i]=str.charCodeAt(i);
+  for (let i = 0; i < str.length; i++) bytes[i] = str.charCodeAt(i);
+
   return bytes.buffer;
 }
 
+// Mini-mapa
 function showMiniMap(lat, lon){
   const url = `https://www.google.com/maps?q=${lat},${lon}&z=18&output=embed`;
-  $('#map').innerHTML = `<iframe width="100%" height="300" style="border:0" loading="lazy" allowfullscreen src="${url}"></iframe>`;
+  $('#map').innerHTML = `
+    <iframe width="100%" height="300" style="border:0" loading="lazy"
+      allowfullscreen src="${url}">
+    </iframe>`;
 }
 
+/* ----------------------------------------------------------
+   REGISTRO
+---------------------------------------------------------- */
 $('#btn-register').onclick = async () => {
-  let username = $('#reg-username').value;
-  username = normalizeUsername(username);
-
+  let username = normalizeUsername($('#reg-username').value);
   const display = $('#reg-display').value.trim() || username;
+
   if(!username){ alert('Ingrese usuario'); return; }
 
   const res = await fetch(`${BACKEND}/register-begin`,{
@@ -38,13 +59,31 @@ $('#btn-register').onclick = async () => {
   });
 
   const data = await res.json();
+
+  if (!data.options){
+    alert("Error: backend no devolvió opciones de registro.");
+    return;
+  }
+
   const options = data.options;
+
+  // PROTECCIÓN: evitar valores undefined
+  if (!options.challenge){
+    alert("Error: challenge vacío (backend).");
+    return;
+  }
+
   options.challenge = base64UrlToBuf(options.challenge);
   options.user.id = base64UrlToBuf(options.user.id);
-  if (options.excludeCredentials) for (let c of options.excludeCredentials) c.id = base64UrlToBuf(c.id);
+
+  if (Array.isArray(options.excludeCredentials)){
+    options.excludeCredentials = options.excludeCredentials
+      .map(c => ({ ...c, id: base64UrlToBuf(c.id) }));
+  }
 
   try{
     const credential = await navigator.credentials.create({ publicKey: options });
+
     const attestation = {
       id: credential.id,
       rawId: bufToBase64Url(credential.rawId),
@@ -62,43 +101,54 @@ $('#btn-register').onclick = async () => {
 
     const r2 = await complete.json();
     $('#reg-status').innerText = r2.verified ? 'Registro OK' : 'Registro falló';
-  }catch(e){ alert('Error registro: '+e.message); }
+  }
+  catch(e){
+    $('#reg-status').innerText = "Error: " + e.message;
+  }
 };
 
+/* ----------------------------------------------------------
+   AUTENTICACIÓN + MARCACIÓN
+---------------------------------------------------------- */
 $('#btn-auth').onclick = async () => {
-  let username = $('#auth-username').value;
-  username = normalizeUsername(username);
+  let username = normalizeUsername($('#auth-username').value);
+  if (!username){ alert("Ingrese usuario"); return; }
 
-  if(!username){ alert('Ingrese usuario'); return; }
   attemptCounter = 0;
   await doAuth(username);
 };
 
 async function doAuth(username){
   attemptCounter++;
-  if(attemptCounter>MAX_ATTEMPTS){
-    $('#auth-status').innerText='Máximo de intentos alcanzado.';
+  if (attemptCounter > MAX_ATTEMPTS){
+    $('#auth-status').innerText = 'Máximo de intentos alcanzado.';
     return;
   }
 
   $('#auth-status').innerText = `Intento ${attemptCounter}/${MAX_ATTEMPTS}`;
 
-  // envío seguro
   const beg = await fetch(`${BACKEND}/auth-begin`,{
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ username })
   });
 
   const { options, userId, displayName } = await beg.json();
+
+  if (!options || !options.challenge){
+    $('#auth-status').innerText = "Error: challenge faltante.";
+    return;
+  }
+
   options.challenge = base64UrlToBuf(options.challenge);
 
-  if(options.allowCredentials){
+  if (Array.isArray(options.allowCredentials)){
     options.allowCredentials = options.allowCredentials
       .map(c => ({ ...c, id: base64UrlToBuf(c.id) }));
   }
 
   try{
     const assertion = await navigator.credentials.get({ publicKey: options });
+
     const authData = {
       id: assertion.id,
       rawId: bufToBase64Url(assertion.rawId),
@@ -117,30 +167,40 @@ async function doAuth(username){
     });
 
     const result = await r.json();
-    if(!result.verified){
+    if (!result.verified){
       $('#auth-status').innerText='No reconocido, intente de nuevo.';
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(async (pos)=>{
+    // Ubicación
+    navigator.geolocation.getCurrentPosition(async pos=>{
       const { latitude, longitude, accuracy } = pos.coords;
+
       const markRes = await fetch(`${BACKEND}/mark`,{
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ userId, displayName, latitude, longitude, accuracy })
       });
+
       const j = await markRes.json();
-      $('#auth-status').innerText = `Marcación OK: ${new Date(j.timestamp).toLocaleString()} (${displayName})`;
+      $('#auth-status').innerText =
+        `Marcación OK: ${new Date(j.timestamp).toLocaleString()} (${displayName})`;
+
       showMiniMap(latitude, longitude);
-    }, async (_err)=>{
+
+    }, async ()=>{
+      // SIN UBICACIÓN
       const markRes = await fetch(`${BACKEND}/mark`,{
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ userId, displayName })
       });
+
       const j = await markRes.json();
-      $('#auth-status').innerText = `Marcación sin ubicación: ${new Date(j.timestamp).toLocaleString()} (${displayName})`;
+      $('#auth-status').innerText =
+        `Marcación sin ubicación: ${new Date(j.timestamp).toLocaleString()} (${displayName})`;
     }, { enableHighAccuracy:true, timeout:10000 });
 
-  }catch(e){
+  }
+  catch(e){
     $('#auth-status').innerText = `Error: ${e.message} — Intentos ${attemptCounter}/${MAX_ATTEMPTS}`;
   }
 }
