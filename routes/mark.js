@@ -3,48 +3,63 @@ import crypto from 'crypto';
 import { pool } from '../db.js';
 
 const router = express.Router();
+
+/* -----------------------------------------------------------
+   Generar ID universal
+----------------------------------------------------------- */
 const makeUUID = () => crypto.randomUUID();
 
+/* -----------------------------------------------------------
+   REGISTRO DE MARCACIÓN DE ASISTENCIA
+----------------------------------------------------------- */
 router.post('/mark', async (req, res) => {
   try {
-    const { userId, displayName, latitude, longitude, accuracy } = req.body;
-    const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || null;
-    const ua = req.headers['user-agent'] || null;
-    const id = makeUUID();
-    const timestamp = new Date().toISOString();
+    let { userId, displayName, latitude, longitude, accuracy } = req.body;
 
-    await pool.query(
-      `INSERT INTO marks (id, user_id, display_name, timestamp, latitude, longitude, accuracy, ip, user_agent)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [id, userId, displayName || null, timestamp, latitude ?? null, longitude ?? null, accuracy ?? null, ip, ua]
+    // Validar userId
+    if (!userId)
+      return res.status(400).json({ error: 'userId is required' });
+
+    // Confirmar que el usuario existe
+    const u = await pool.query(
+      'SELECT * FROM users WHERE id=$1',
+      [userId]
     );
 
-    res.json({ ok: true, id, timestamp });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    if (!u.rows.length)
+      return res.status(404).json({ error: 'user not found' });
+
+    // Crear timestamp ISO
+    const ts = new Date().toISOString();
+
+    // Insertar marcación
+    const insert = await pool.query(
+      `INSERT INTO marks
+       (id, user_id, display_name, latitude, longitude, accuracy, timestamp)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       RETURNING *`,
+      [
+        makeUUID(),
+        userId,
+        displayName || u.rows[0].display_name,
+        latitude || null,
+        longitude || null,
+        accuracy || null,
+        ts
+      ]
+    );
+
+    return res.json({
+      ok: true,
+      timestamp: insert.rows[0].timestamp,
+      displayName: insert.rows[0].display_name
+    });
+
+  } catch (e) {
+    console.error("❌ Error en /mark:", e);
+    return res.status(500).json({ error: e.message });
+  }
 });
 
-router.get('/marks', async (_req, res) => {
-  try {
-    const rows = await pool.query('SELECT * FROM marks ORDER BY timestamp DESC LIMIT 5000');
-    res.json(rows.rows);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/stats', async (req, res) => {
-  try {
-    const { from, to, user } = req.query;
-    const clauses = [];
-    const params = [];
-    let i = 1;
-    if (from) { clauses.push(`timestamp >= $${i++}`); params.push(from); }
-    if (to)   { clauses.push(`timestamp <= $${i++}`); params.push(to); }
-    if (user) { clauses.push(`display_name ILIKE $${i++}`); params.push(`%${user}%`); }
-    const where = clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
-    const q = `SELECT display_name, DATE(timestamp) AS day, COUNT(*) AS total FROM marks ${where}
-               GROUP BY display_name, day ORDER BY day DESC, display_name ASC`;
-    const rows = await pool.query(q, params);
-    res.json(rows.rows);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
+/* EXPORTAR */
 export default router;
