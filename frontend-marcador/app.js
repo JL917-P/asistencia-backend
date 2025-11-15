@@ -3,8 +3,13 @@ let attemptCounter = 0;
 const MAX_ATTEMPTS = 5;
 const $ = s => document.querySelector(s);
 
+// Normalización segura de username
+const normalizeUsername = u =>
+  u.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,'');
+
 function bufToBase64Url(buffer){
-  return btoa(String.fromCharCode(...new Uint8Array(buffer))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
 }
 function base64UrlToBuf(base64url){
   const pad = base64url.length%4===0?'':'='.repeat(4-base64url.length%4);
@@ -21,7 +26,9 @@ function showMiniMap(lat, lon){
 }
 
 $('#btn-register').onclick = async () => {
-  const username = $('#reg-username').value.trim();
+  let username = $('#reg-username').value;
+  username = normalizeUsername(username);
+
   const display = $('#reg-display').value.trim() || username;
   if(!username){ alert('Ingrese usuario'); return; }
 
@@ -29,6 +36,7 @@ $('#btn-register').onclick = async () => {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ username, displayName: display })
   });
+
   const data = await res.json();
   const options = data.options;
   options.challenge = base64UrlToBuf(options.challenge);
@@ -46,32 +54,48 @@ $('#btn-register').onclick = async () => {
       },
       type: credential.type
     };
+
     const complete = await fetch(`${BACKEND}/register-complete`,{
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ userId: data.userId, attestation, origin: ORIGIN })
     });
+
     const r2 = await complete.json();
     $('#reg-status').innerText = r2.verified ? 'Registro OK' : 'Registro falló';
   }catch(e){ alert('Error registro: '+e.message); }
 };
 
 $('#btn-auth').onclick = async () => {
-  const username = $('#auth-username').value.trim();
+  let username = $('#auth-username').value;
+  username = normalizeUsername(username);
+
   if(!username){ alert('Ingrese usuario'); return; }
-  attemptCounter = 0; await doAuth(username);
+  attemptCounter = 0;
+  await doAuth(username);
 };
 
 async function doAuth(username){
-  attemptCounter++; if(attemptCounter>MAX_ATTEMPTS){ $('#auth-status').innerText='Máximo de intentos alcanzado.'; return; }
+  attemptCounter++;
+  if(attemptCounter>MAX_ATTEMPTS){
+    $('#auth-status').innerText='Máximo de intentos alcanzado.';
+    return;
+  }
+
   $('#auth-status').innerText = `Intento ${attemptCounter}/${MAX_ATTEMPTS}`;
 
+  // envío seguro
   const beg = await fetch(`${BACKEND}/auth-begin`,{
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ username })
   });
+
   const { options, userId, displayName } = await beg.json();
   options.challenge = base64UrlToBuf(options.challenge);
-  if(options.allowCredentials){ options.allowCredentials = options.allowCredentials.map(c=>({ ...c, id: base64UrlToBuf(c.id) })); }
+
+  if(options.allowCredentials){
+    options.allowCredentials = options.allowCredentials
+      .map(c => ({ ...c, id: base64UrlToBuf(c.id) }));
+  }
 
   try{
     const assertion = await navigator.credentials.get({ publicKey: options });
@@ -91,8 +115,12 @@ async function doAuth(username){
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ userId, assertion: authData, origin: ORIGIN })
     });
+
     const result = await r.json();
-    if(!result.verified){ $('#auth-status').innerText='No reconocido, intente de nuevo.'; return; }
+    if(!result.verified){
+      $('#auth-status').innerText='No reconocido, intente de nuevo.';
+      return;
+    }
 
     navigator.geolocation.getCurrentPosition(async (pos)=>{
       const { latitude, longitude, accuracy } = pos.coords;
@@ -111,5 +139,8 @@ async function doAuth(username){
       const j = await markRes.json();
       $('#auth-status').innerText = `Marcación sin ubicación: ${new Date(j.timestamp).toLocaleString()} (${displayName})`;
     }, { enableHighAccuracy:true, timeout:10000 });
-  }catch(e){ $('#auth-status').innerText = `Error: ${e.message} — Intentos ${attemptCounter}/${MAX_ATTEMPTS}`; }
+
+  }catch(e){
+    $('#auth-status').innerText = `Error: ${e.message} — Intentos ${attemptCounter}/${MAX_ATTEMPTS}`;
+  }
 }
