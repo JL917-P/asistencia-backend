@@ -11,28 +11,26 @@ import {
 const router = express.Router();
 
 /* -----------------------------------------------------------
-   Normalización de username (tildes, espacios, mayúsculas)
+   Normalización de username
 ----------------------------------------------------------- */
 const normalizeUsername = u =>
   (u || "")
     .trim()
     .toLowerCase()
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // quitar tildes
-    .replace(/\s+/g, "");                             // quitar espacios
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, "");
 
 /* -----------------------------------------------------------
-   Storage temporal de challenges (registro / login)
+   Fijar RP_ID y ORIGEN sin saltos de línea
 ----------------------------------------------------------- */
+const clean = v => (v || "").trim().replace(/\n/g, "");
+const RP_ID = clean(process.env.RP_ID);
+const EMP_ORIGIN = clean(process.env.EMPLOYEE_ORIGIN_FULL);
+const makeUUID = () => crypto.randomUUID();
+
+/* Storage temporal */
 const regChallenges = new Map();
 const authChallenges = new Map();
-
-/* -----------------------------------------------------------
-   Variables del entorno
------------------------------------------------------------ */
-const RP_ID = process.env.RP_ID;
-const EMP_ORIGIN = process.env.EMPLOYEE_ORIGIN_FULL;
-
-const makeUUID = () => crypto.randomUUID();
 
 /* ===========================================================
    1. REGISTER BEGIN
@@ -40,13 +38,11 @@ const makeUUID = () => crypto.randomUUID();
 router.post('/register-begin', async (req, res) => {
   try {
     let { username, displayName } = req.body;
-
-    // NORMALIZAR
     username = normalizeUsername(username);
 
-    if (!username) return res.status(400).json({ error: 'username required' });
+    if (!username)
+      return res.status(400).json({ error: 'username required' });
 
-    // Buscar usuario (case insensitive)
     const u = await pool.query(
       'SELECT * FROM users WHERE LOWER(username)=LOWER($1)',
       [username]
@@ -63,11 +59,15 @@ router.post('/register-begin', async (req, res) => {
       );
     }
 
-    // Obtener credenciales existentes
     const creds = await pool.query(
       'SELECT credential_id FROM credentials WHERE user_id=$1',
       [userId]
     );
+
+    const exclude = creds.rows.map(r => ({
+      id: Buffer.from(r.credential_id, 'base64url'),
+      type: 'public-key',
+    }));
 
     const options = generateRegistrationOptions({
       rpName: 'Asistencia',
@@ -75,12 +75,9 @@ router.post('/register-begin', async (req, res) => {
       userID: userId,
       userName: username,
       userDisplayName: displayName || username,
-      attestationType: 'indirect',
+      attestationType: 'none',
       authenticatorSelection: { userVerification: 'preferred' },
-      excludeCredentials: creds.rows.map(r => ({
-        id: Buffer.from(r.credential_id, 'base64url'),
-        type: 'public-key',
-      })),
+      excludeCredentials: exclude,
     });
 
     regChallenges.set(userId, options.challenge);
@@ -88,6 +85,7 @@ router.post('/register-begin', async (req, res) => {
     return res.json({ options, userId });
 
   } catch (e) {
+    console.error("❌ register-begin error:", e);
     return res.status(500).json({ error: e.message });
   }
 });
@@ -98,7 +96,6 @@ router.post('/register-begin', async (req, res) => {
 router.post('/register-complete', async (req, res) => {
   try {
     const { userId, attestation, origin } = req.body;
-
     const expectedChallenge = regChallenges.get(userId);
 
     const verification = await verifyRegistrationResponse({
@@ -135,6 +132,7 @@ router.post('/register-complete', async (req, res) => {
     return res.json({ verified: true });
 
   } catch (e) {
+    console.error("❌ register-complete error:", e);
     return res.status(500).json({ error: e.message });
   }
 });
@@ -145,8 +143,6 @@ router.post('/register-complete', async (req, res) => {
 router.post('/auth-begin', async (req, res) => {
   try {
     let { username } = req.body;
-
-    // NORMALIZAR
     username = normalizeUsername(username);
 
     const u = await pool.query(
@@ -185,6 +181,7 @@ router.post('/auth-begin', async (req, res) => {
     });
 
   } catch (e) {
+    console.error("❌ auth-begin error:", e);
     return res.status(500).json({ error: e.message });
   }
 });
@@ -235,9 +232,10 @@ router.post('/auth-complete', async (req, res) => {
     return res.json({ verified: true });
 
   } catch (e) {
+    console.error("❌ auth-complete error:", e);
     return res.status(500).json({ error: e.message });
   }
 });
 
-/* EXPORTAR RUTA */
+/* EXPORT */
 export default router;
