@@ -1,52 +1,86 @@
-const { BACKEND } = window.APP_CONFIG;
+const BACKEND = window.APP_CONFIG.BACKEND;
 const $ = s => document.querySelector(s);
-let currentRows = [];
+const tbody = $("#tbl tbody");
 
-$('#btn-load').onclick = loadData;
-$('#btn-export').onclick = exportCSV;
+// Normalización igual que el backend
+const cleanUser = u =>
+  (u || "").trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g,'');
 
-async function loadData(){
-  const rows = await fetch(`${BACKEND}/marks`).then(r=>r.json());
-  currentRows = rows;
+// Cargar datos
+async function fetchMarks() {
+  const user = cleanUser($("#f-user").value);
+  const start = $("#f-start").value;
+  const end = $("#f-end").value;
+
+  const url = new URL(`${BACKEND}/marks-list`);
+  if (user) url.searchParams.append("user", user);
+  if (start) url.searchParams.append("start", start);
+  if (end) url.searchParams.append("end", end);
+
+  const res = await fetch(url);
+  return await res.json();
+}
+
+// Renderizar tabla
+function renderTable(rows) {
+  tbody.innerHTML = "";
+
+  rows.forEach(r => {
+    const date = new Date(r.timestamp);
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${r.username}</td>
+      <td>${r.display_name}</td>
+      <td>${date.toLocaleDateString()}</td>
+      <td>${date.toLocaleTimeString()}</td>
+      <td>${r.latitude && r.longitude ? `${r.latitude}, ${r.longitude}` : "—"}</td>
+      <td>
+        ${r.latitude && r.longitude
+          ? `<button class="map-btn" onclick="openMap(${r.latitude},${r.longitude})">Ver mapa</button>`
+          : "—"
+        }
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// Abrir mapa en ventana
+function openMap(lat, lon) {
+  const url = `https://www.google.com/maps?q=${lat},${lon}&z=18`;
+  window.open(url, "_blank");
+}
+
+// Evento filtrar
+$("#btn-filter").onclick = async () => {
+  const rows = await fetchMarks();
   renderTable(rows);
-  renderMap(rows);
-}
+};
 
-function renderTable(rows){
-  const tbody = document.querySelector('#tbl tbody');
-  tbody.innerHTML = rows.map(r => `
-    <tr>
-      <td>${new Date(r.timestamp).toLocaleString()}</td>
-      <td>${r.display_name || r.user_id}</td>
-      <td>${r.latitude ?? '-'}</td>
-      <td>${r.longitude ?? '-'}</td>
-      <td>${r.ip ?? '-'}</td>
-      <td>${r.user_agent ?? '-'}</td>
-    </tr>
-  `).join('');
-}
+// Exportar
+$("#btn-export").onclick = async () => {
+  const rows = await fetchMarks();
 
-function renderMap(rows){
-  // Embed simple: centra en el último registro con coordenadas; si no hay, muestra Lima por defecto
-  const last = rows.find(r => r.latitude && r.longitude);
-  const lat = last ? Number(last.latitude) : -12.0464;
-  const lon = last ? Number(last.longitude) : -77.0428;
-  const url = `https://www.google.com/maps?q=${lat},${lon}&z=13&output=embed`;
-  document.getElementById('map-wrap').innerHTML = `<iframe width="100%" height="500" style="border:0" loading="lazy" allowfullscreen src="${url}"></iframe>`;
-}
+  let csv = "Usuario,Nombre,Fecha,Hora,Latitud,Longitud\n";
 
-function exportCSV(){
-  const rows = [...document.querySelectorAll('#tbl tbody tr')].map(tr =>
-    [...tr.children].map(td => '"' + String(td.textContent).replaceAll('"','""') + '"').join(',')
-  );
-  const header = '"Fecha/Hora","Empleado","Lat","Lon","IP","UserAgent"';
-  const csv = [header, ...rows].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  rows.forEach(r => {
+    const d = new Date(r.timestamp);
+    const fecha = d.toLocaleDateString();
+    const hora = d.toLocaleTimeString();
+    csv += `${r.username},${r.display_name},${fecha},${hora},${r.latitude || ""},${r.longitude || ""}\n`;
+  });
+
+  const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = `marcaciones_${new Date().toISOString().slice(0,10)}.csv`;
-  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-}
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "asistencias.csv";
+  a.click();
+};
 
-// carga inicial
-loadData();
+// Cargar inicial
+(async () => {
+  const rows = await fetchMarks();
+  renderTable(rows);
+})();
