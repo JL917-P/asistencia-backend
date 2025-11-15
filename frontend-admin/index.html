@@ -1,49 +1,75 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Centro de Control de Asistencia</title>
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel de Asistencias – Admin</title>
+<link rel="stylesheet" href="style.css">
+
+<!-- Iconos -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
+
 <body>
-  <main>
-    <h1>Centro de Control</h1>
-    <section>
-      <div class="filters">
-        <input id="f-user" placeholder="Empleado (nombre)" />
-        <input id="f-from" type="date" />
-        <input id="f-to" type="date" />
-        <button id="btn-load">Cargar</button>
-        <button id="btn-export">Exportar CSV</button>
-      </div>
-    </section>
 
-    <section>
-      <div id="map-wrap" class="map"></div>
-    </section>
+<header>
+  <h1><i class="fa-solid fa-building-user"></i> Panel de Asistencias</h1>
+</header>
 
-    <section>
-      <table id="tbl">
-        <thead>
-          <tr>
-            <th>Fecha/Hora</th>
-            <th>Empleado</th>
-            <th>Lat</th>
-            <th>Lon</th>
-            <th>IP</th>
-            <th>Dispositivo</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
-  </main>
+<main>
 
-  <!-- Cargar primero la configuración -->
-  <script src="config.js"></script>
+  <!-- FILTROS -->
+  <section class="filters">
+    <div class="filter-group">
+      <label>Usuario:</label>
+      <input type="text" id="f-user" placeholder="jpatino, jlopez...">
+    </div>
 
-  <!-- Luego el código principal -->
-  <script src="admin.js"></script>
+    <div class="filter-group">
+      <label>Desde:</label>
+      <input type="date" id="f-start">
+    </div>
+
+    <div class="filter-group">
+      <label>Hasta:</label>
+      <input type="date" id="f-end">
+    </div>
+
+    <button id="btn-filter" class="btn-primary">
+      <i class="fa-solid fa-magnifying-glass"></i> Filtrar
+    </button>
+
+    <button id="btn-export" class="btn-secondary">
+      <i class="fa-solid fa-file-export"></i> Exportar Excel
+    </button>
+  </section>
+
+  <!-- TABLA -->
+  <section class="table-container">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th>Usuario</th>
+          <th>Nombre</th>
+          <th>Fecha</th>
+          <th>Hora</th>
+          <th>Ubicación</th>
+          <th>Mapa</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+</main>
+
+<!-- APP_CONFIG (cambiar si tu URL cambia) -->
+<script>
+window.APP_CONFIG = {
+  BACKEND: "https://asistencia-backend-dkn9.onrender.com"
+};
+</script>
+
+<script src="admin.js"></script>
 </body>
 </html>
