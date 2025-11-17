@@ -1,3 +1,4 @@
+console.log("🔥 auth.js cargado!");
 import express from 'express';
 import crypto from 'crypto';
 import { pool } from '../db.js';
