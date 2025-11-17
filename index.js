@@ -20,35 +20,35 @@ const app = express();
 app.use(express.json({ limit: "1mb" }));
 
 // ================================================================
+// ================================================================
 // NORMALIZADOR DE ORIGEN (acepta variantes con / final)
 // ================================================================
 const clean = (v) =>
   (v || "")
     .trim()
-    .replace(/\/$/, "") // 🔥 elimina slash final
+    .replace(/\/$/, "")   // elimina slash final
     .replace(/\n/g, "");
+
 // ================================================================
 // CORS CONFIG – PERMITIR SOLO LOS FRONTENDS OFICIALES
 // ================================================================
-const allowedOrigins = [
+const allowedOriginsRaw = [
   process.env.EMPLOYEE_ORIGIN_FULL,
   process.env.ADMIN_ORIGIN_FULL
 ];
 
 // limpiar valores
-const clean = v => (v || "").trim().replace(/\n/g, "");
-
-const ALLOWED = allowedOrigins.map(clean);
+const ALLOWED = allowedOriginsRaw.map(clean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true); // Postman u orígenes internos
+      if (!origin) return callback(null, true);
 
       console.log("🌐 CORS origin recibido:", origin);
-      console.log("🌐 Lista permitidos:", ALLOWED);
+      console.log("🌐 Permitidos:", ALLOWED);
 
-      if (ALLOWED.includes(origin)) {
+      if (ALLOWED.includes(clean(origin))) {
         return callback(null, true);
       }
 
@@ -56,11 +56,10 @@ app.use(
       return callback(new Error("CORS blocked: " + origin));
     },
     credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization'],
-    methods: ['GET', 'POST', 'OPTIONS']
+    allowedHeaders: ["Content-Type", "Authorization"],
+    methods: ["GET", "POST", "OPTIONS"]
   })
 );
-
 
 // ================================================================
 // PRE-FLIGHT GLOBAL PARA RENDER (SOLUCIÓN AL 502)
