@@ -29,11 +29,11 @@ const clean = v => (v || "").trim().replace(/\n/g, "");
 // FRONTEND EXACTO
 const EXPECTED_ORIGIN = clean(process.env.EMPLOYEE_ORIGIN_FULL);
 
-// RP_ID extraído correctamente (SOLO DOMINIO)
+// RP_ID extraído correctamente (solo dominio)
 const RP_ID = EXPECTED_ORIGIN
   .replace("https://", "")
   .replace("http://", "")
-  .split("/")[0]; 		// ← EVITA TODOS LOS ERRORES
+  .split("/")[0];
 
 console.log("🔎 WebAuthn config:");
 console.log("   ORIGIN:", EXPECTED_ORIGIN);
@@ -42,7 +42,7 @@ console.log("   RP_ID :", RP_ID);
 // UUID
 const makeUUID = () => crypto.randomUUID();
 
-// Storage temporal de challenges
+// Storage de challenges
 const regChallenges = new Map();
 const authChallenges = new Map();
 
@@ -53,6 +53,7 @@ router.post('/register-begin', async (req, res) => {
   try {
     let { username, displayName } = req.body;
     username = normalizeUsername(username);
+    displayName = (displayName || username).trim();
 
     if (!username)
       return res.status(400).json({ error: 'username required' });
@@ -69,7 +70,7 @@ router.post('/register-begin', async (req, res) => {
       userId = makeUUID();
       await pool.query(
         'INSERT INTO users (id, username, display_name) VALUES ($1,$2,$3)',
-        [userId, username, displayName || username]
+        [userId, username, displayName]
       );
     }
 
@@ -83,12 +84,17 @@ router.post('/register-begin', async (req, res) => {
       type: 'public-key',
     }));
 
+    /* ⭐ CORRECCIÓN CRÍTICA ⭐
+       WebAuthn *NO* acepta string para userID.
+       Debe ser un Buffer obligatoriamente. */
+    const userID_Buffer = Buffer.from(userId, "utf8");
+
     const options = generateRegistrationOptions({
       rpName: 'Asistencia',
       rpID: RP_ID,
-      userID: userId,
+      userID: userID_Buffer,  // ← CORREGIDO
       userName: username,
-      userDisplayName: displayName || username,
+      userDisplayName: displayName,
       attestationType: 'none',
       authenticatorSelection: { userVerification: 'preferred' },
       excludeCredentials: exclude,
