@@ -27,52 +27,50 @@ const clean = (v) =>
     .trim()
     .replace(/\/$/, "") // 🔥 elimina slash final
     .replace(/\n/g, "");
-
 // ================================================================
-// CORS CONFIG – SOLO FRONTEND OFICIAL
+// CORS CONFIG – PERMITIR SOLO LOS FRONTENDS OFICIALES
 // ================================================================
 const allowedOrigins = [
   process.env.EMPLOYEE_ORIGIN_FULL,
-  process.env.ADMIN_ORIGIN_FULL,
+  process.env.ADMIN_ORIGIN_FULL
 ];
 
-const ALLOWED = allowedOrigins.map(clean);
+// limpiar valores
+const clean = v => (v || "").trim().replace(/\n/g, "");
 
-console.log("=== ORÍGENES PERMITIDOS ===");
-console.log(ALLOWED);
+const ALLOWED = allowedOrigins.map(clean);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
+      if (!origin) return callback(null, true); // Postman u orígenes internos
 
-      const o = clean(origin);
+      console.log("🌐 CORS origin recibido:", origin);
+      console.log("🌐 Lista permitidos:", ALLOWED);
 
-      if (ALLOWED.includes(o)) {
+      if (ALLOWED.includes(origin)) {
         return callback(null, true);
       }
 
-      console.log("⛔ CORS bloqueado para:", origin, "→ limpio:", o);
-      return callback(new Error("CORS BLOCKED"));
+      console.log("⛔ CORS bloqueado:", origin);
+      return callback(new Error("CORS blocked: " + origin));
     },
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type"],
     credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST', 'OPTIONS']
   })
 );
+
 
 // ================================================================
 // PRE-FLIGHT GLOBAL PARA RENDER (SOLUCIÓN AL 502)
 // ================================================================
 app.options("*", (req, res) => {
-  const origin = clean(req.headers.origin || "");
-  if (ALLOWED.includes(origin)) {
-    res.header("Access-Control-Allow-Origin", origin);
-  }
-  res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type");
+  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.header("Access-Control-Allow-Credentials", "true");
-  return res.sendStatus(200);
+  res.sendStatus(200);
 });
 
 // ================================================================
