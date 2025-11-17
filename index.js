@@ -2,17 +2,27 @@
 //  ASISTENCIA BACKEND – SERVIDOR EXPRESS (Render.com READY)
 // ================================================================
 console.log("🚀 index.js desde GitHub fue cargado correctamente");
+
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { initDb } from './models.js';
 import authRouter from './routes/auth.js';
 import markRouter from './routes/mark.js';
+import dbCheckRouter from "./routes/dbcheck.js";  // ✔ importar aquí
 
-const app = express();
+const app = express();  // ✔ app se crea aquí
 
 // JSON
 app.use(express.json({ limit: '1mb' }));
+
+// RUTA DE PRUEBA DB
+app.use("/", dbCheckRouter);  // ✔ ahora sí se puede usar app
+
+// ================================================================
+// CORS CONFIG – PERMITIR SOLO LOS FRONTENDS OFICIALES
+// ================================================================
+
 
 // ================================================================
 // NORMALIZADOR DE ORIGEN (acepta variantes con / final)
