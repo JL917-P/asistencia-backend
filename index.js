@@ -23,30 +23,25 @@ app.use(express.json({ limit: "1mb" }));
 // ================================================================
 // NORMALIZADOR DE ORIGEN (acepta variantes con / final)
 // ================================================================
-const clean = (v) =>
+const clean = v =>
   (v || "")
     .trim()
-    .replace(/\/$/, "")   // elimina slash final
+    .replace(/\/$/, "")
     .replace(/\n/g, "");
 
-// ================================================================
-// CORS CONFIG – PERMITIR SOLO LOS FRONTENDS OFICIALES
-// ================================================================
-const allowedOriginsRaw = [
+const ALLOWED = [
   process.env.EMPLOYEE_ORIGIN_FULL,
-  process.env.ADMIN_ORIGIN_FULL
-];
+  process.env.ADMIN_ORIGIN_FULL,
+].filter(Boolean).map(clean);
 
-// limpiar valores
-const ALLOWED = allowedOriginsRaw.map(clean);
+console.log("🌐 Orígenes permitidos:", ALLOWED);
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
+      if (!origin) return callback(null, true); // Postman, etc.
 
       console.log("🌐 CORS origin recibido:", origin);
-      console.log("🌐 Permitidos:", ALLOWED);
 
       if (ALLOWED.includes(clean(origin))) {
         return callback(null, true);
@@ -57,7 +52,7 @@ app.use(
     },
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization"],
-    methods: ["GET", "POST", "OPTIONS"]
+    methods: ["GET", "POST", "OPTIONS"],
   })
 );
 
