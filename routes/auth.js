@@ -30,7 +30,8 @@ const normalizeUsername = u =>
 const clean = v => (v || "").trim().replace(/\n/g, "");
 
 // origin declarado en variables de entorno
-const EXPECTED_ORIGIN = clean(process.env.EMPLOYEE_ORIGIN_FULL);
+
+const EXPECTED_ORIGIN = clean(process.env.BACKEND_ORIGIN_FULL || process.env.ADMIN_ORIGIN_FULL);
 
 // RP_ID debe ser sólo dominio
 const RP_ID = EXPECTED_ORIGIN
