@@ -11,45 +11,57 @@ import markRouter from './routes/mark.js';
 
 const app = express();
 
-// Permitir JSON
+// JSON
 app.use(express.json({ limit: '1mb' }));
 
 // ================================================================
-// CORS CONFIG – PERMITIR SOLO LOS FRONTENDS OFICIALES
+// NORMALIZADOR DE ORIGEN (acepta variantes con / final)
 // ================================================================
-const allowedOrigins = [
-  process.env.EMPLOYEE_ORIGIN_FULL, // frontend-marcador
-  process.env.ADMIN_ORIGIN_FULL     // frontend-admin
+function normalize(origin = "") {
+  return origin.trim().replace(/\/+$/, "");
+}
+
+// ================================================================
+// ORÍGENES PERMITIDOS
+// ================================================================
+const ALLOWED = [
+  normalize(process.env.EMPLOYEE_ORIGIN_FULL),
+  normalize(process.env.ADMIN_ORIGIN_FULL)
 ];
 
-// Normalizar orígenes (evita errores por espacios o saltos de línea)
-const clean = v => (v || "").trim().replace(/\n/g, "");
-const ALLOWED = allowedOrigins.map(clean);
+console.log("🔵 ALLOWED ORIGINS = ", ALLOWED);
 
+// ================================================================
+// CORS PRINCIPAL
+// ================================================================
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Permitir peticiones internas (Postman, cURL, navegador)
-      if (!origin) return callback(null, true);
+      if (!origin) return callback(null, true); // Postman, navegador interno
 
-      if (ALLOWED.includes(origin)) {
+      const clean = normalize(origin);
+
+      if (ALLOWED.includes(clean)) {
         return callback(null, true);
       }
 
-      console.log("⛔ CORS bloqueado para origin:", origin);
-      return callback(new Error(`CORS blocked for origin: ${origin}`));
+      console.log("⛔ CORS BLOQUEADO para:", origin, "→ normalizado:", clean);
+      return callback(new Error("CORS blocked: " + clean));
     },
-    methods: ['POST', 'GET', 'OPTIONS'],
-    allowedHeaders: ['Content-Type'],
+    methods: ['GET', 'POST', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
   })
 );
 
 // ================================================================
-// PRE-FLIGHT PARA TODOS LOS ENDPOINTS (NECESARIO PARA RENDER)
+// PRE-FLIGHT UNIVERSAL – NECESARIO PARA RENDER
 // ================================================================
 app.options('*', (req, res) => {
-  res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+  const origin = normalize(req.headers.origin || "");
+  if (ALLOWED.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", req.headers.origin);
+  }
   res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.header("Access-Control-Allow-Credentials", "true");
@@ -57,7 +69,7 @@ app.options('*', (req, res) => {
 });
 
 // ================================================================
-// RUTA BACKEND STATUS
+// STATUS ROUTE
 // ================================================================
 app.get('/', (_req, res) =>
   res.json({
@@ -68,7 +80,7 @@ app.get('/', (_req, res) =>
 );
 
 // ================================================================
-// DEBUG DE VARIABLES PARA VERIFICAR CONFIG EN RENDER
+// DEBUG ENV (para Render)
 // ================================================================
 app.get("/debug-env", (req, res) => {
   res.json({
@@ -76,7 +88,8 @@ app.get("/debug-env", (req, res) => {
     EMPLOYEE_ORIGIN_FULL: process.env.EMPLOYEE_ORIGIN_FULL,
     ADMIN_ORIGIN_FULL: process.env.ADMIN_ORIGIN_FULL,
     PORT: process.env.PORT,
-    DATABASE_URL: process.env.DATABASE_URL ? "OK" : "MISSING"
+    DATABASE_URL: process.env.DATABASE_URL ? "OK" : "MISSING",
+    allowed: ALLOWED
   });
 });
 
@@ -87,7 +100,7 @@ app.use('/', authRouter);
 app.use('/', markRouter);
 
 // ================================================================
-// INICIAR SERVIDOR (Render requiere 0.0.0.0)
+// INICIAR SERVIDOR
 // ================================================================
 const port = Number(process.env.PORT) || 4000;
 
