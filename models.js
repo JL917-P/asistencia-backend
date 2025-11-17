@@ -1,18 +1,15 @@
 import { pool } from './db.js';
 
-/* ===========================================================
-   CREACIÓN DE TABLAS (USERS, CREDENTIALS, MARKS)
-=========================================================== */
-
 export async function initDb() {
   try {
-    console.log("📦 Inicializando base de datos...");
+    const client = await pool.connect();
 
-    /* ----------------------
-       TABLA: users
-       Guarda usuarios normalizados
-    ---------------------- */
-    await pool.query(`
+    console.log("🔧 Inicializando base de datos...");
+
+    /* =============================
+       TABLA USERS (WebAuthn READY)
+       ============================= */
+    await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id TEXT PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
@@ -20,25 +17,23 @@ export async function initDb() {
       );
     `);
 
-    /* ----------------------
-       TABLA: credentials
-       Guarda credenciales WebAuthn
-    ---------------------- */
-    await pool.query(`
+    /* =============================
+       TABLA CREDENTIALS
+       ============================= */
+    await client.query(`
       CREATE TABLE IF NOT EXISTS credentials (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL REFERENCES users(id),
         credential_id TEXT UNIQUE NOT NULL,
         public_key TEXT NOT NULL,
-        sign_count BIGINT NOT NULL
+        sign_count INTEGER NOT NULL
       );
     `);
 
-    /* ----------------------
-       TABLA: marks
-       Registra asistencias
-    ---------------------- */
-    await pool.query(`
+    /* =============================
+       TABLA MARKS (ASISTENCIA)
+       ============================= */
+    await client.query(`
       CREATE TABLE IF NOT EXISTS marks (
         id TEXT PRIMARY KEY,
         user_id TEXT NOT NULL REFERENCES users(id),
@@ -46,34 +41,15 @@ export async function initDb() {
         latitude DOUBLE PRECISION,
         longitude DOUBLE PRECISION,
         accuracy DOUBLE PRECISION,
-        timestamp TIMESTAMPTZ NOT NULL
+        timestamp TIMESTAMP NOT NULL
       );
     `);
 
-    /* ----------------------
-       ÍNDICES RECOMENDADOS
-       (Optimiza /auth-begin y /mark)
-    ---------------------- */
+    console.log("🟢 Tablas creadas/cargadas correctamente.");
 
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_users_username
-      ON users (LOWER(username));
-    `);
-
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_credentials_user
-      ON credentials (user_id);
-    `);
-
-    await pool.query(`
-      CREATE INDEX IF NOT EXISTS idx_marks_user
-      ON marks (user_id);
-    `);
-
-    console.log("✅ Tablas y estructuras listas.");
-
-  } catch (e) {
-    console.error("❌ Error inicializando DB:", e);
-    throw e;
+    client.release();
+  } catch (err) {
+    console.error("❌ Error creando tablas:", err);
+    throw err;
   }
 }
