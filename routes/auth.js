@@ -1,7 +1,9 @@
 console.log("🔥 auth.js cargado!");
+
 import express from 'express';
 import crypto from 'crypto';
 import { pool } from '../db.js';
+
 import {
   generateRegistrationOptions,
   verifyRegistrationResponse,
@@ -11,9 +13,9 @@ import {
 
 const router = express.Router();
 
-/* -----------------------------------------------------------
-   Normalización robusta de username
------------------------------------------------------------ */
+/* ===========================================================
+   NORMALIZADOR ROBUSTO DE USERNAME
+=========================================================== */
 const normalizeUsername = u =>
   (u || "")
     .trim()
@@ -22,15 +24,15 @@ const normalizeUsername = u =>
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, "");
 
-/* -----------------------------------------------------------
-   CONFIGURACIÓN WEB AUTHN FINAL
------------------------------------------------------------ */
+/* ===========================================================
+   CONFIG DE ORIGEN Y RP_ID
+=========================================================== */
 const clean = v => (v || "").trim().replace(/\n/g, "");
 
-// FRONTEND EXACTO
+// origin declarado en variables de entorno
 const EXPECTED_ORIGIN = clean(process.env.EMPLOYEE_ORIGIN_FULL);
 
-// RP_ID extraído correctamente (solo dominio)
+// RP_ID debe ser sólo dominio
 const RP_ID = EXPECTED_ORIGIN
   .replace("https://", "")
   .replace("http://", "")
@@ -40,65 +42,70 @@ console.log("🔎 WebAuthn config:");
 console.log("   ORIGIN:", EXPECTED_ORIGIN);
 console.log("   RP_ID :", RP_ID);
 
-// UUID
+/* ===========================================================
+   HELPERS
+=========================================================== */
 const makeUUID = () => crypto.randomUUID();
 
-// Storage de challenges
+/* Map para almacenar challenges temporales */
 const regChallenges = new Map();
 const authChallenges = new Map();
 
 /* ===========================================================
-   1. REGISTER BEGIN
+    1. REGISTER BEGIN (crear challenge)
 =========================================================== */
 router.post('/register-begin', async (req, res) => {
   try {
     let { username, displayName } = req.body;
+
     username = normalizeUsername(username);
     displayName = (displayName || username).trim();
 
-    if (!username)
-      return res.status(400).json({ error: 'username required' });
+    if (!username) {
+      return res.status(400).json({ error: "username requerido" });
+    }
 
-    const user = await pool.query(
-      'SELECT * FROM users WHERE LOWER(username)=LOWER($1)',
+    /* Buscar usuario o crearlo */
+    const q = await pool.query(
+      "SELECT * FROM users WHERE LOWER(username)=LOWER($1)",
       [username]
     );
 
     let userId;
-    if (user.rows.length) {
-      userId = user.rows[0].id;
+
+    if (q.rows.length) {
+      userId = q.rows[0].id;
     } else {
       userId = makeUUID();
       await pool.query(
-        'INSERT INTO users (id, username, display_name) VALUES ($1,$2,$3)',
+        "INSERT INTO users (id, username, display_name) VALUES ($1,$2,$3)",
         [userId, username, displayName]
       );
     }
 
-    const storedCreds = await pool.query(
-      'SELECT credential_id FROM credentials WHERE user_id=$1',
+    /* Cargar credenciales previas */
+    const creds = await pool.query(
+      "SELECT credential_id FROM credentials WHERE user_id=$1",
       [userId]
     );
 
-    const exclude = storedCreds.rows.map(r => ({
-      id: Buffer.from(r.credential_id, 'base64url'),
-      type: 'public-key',
+    const excludeCredentials = creds.rows.map(r => ({
+      id: Buffer.from(r.credential_id, "base64url"),
+      type: "public-key",
     }));
 
-    /* ⭐ CORRECCIÓN CRÍTICA ⭐
-       WebAuthn *NO* acepta string para userID.
-       Debe ser un Buffer obligatoriamente. */
+    /* 🚀 CORRECTO: userID debe ser Buffer */
     const userID_Buffer = Buffer.from(userId, "utf8");
 
     const options = generateRegistrationOptions({
-      rpName: 'Asistencia',
+      rpName: "Asistencia",
       rpID: RP_ID,
-      userID: userID_Buffer,  // ← CORREGIDO
+      userID: userID_Buffer,      // ⚡ obligatorio
       userName: username,
       userDisplayName: displayName,
-      attestationType: 'none',
-      authenticatorSelection: { userVerification: 'preferred' },
-      excludeCredentials: exclude,
+      attestationType: "none",
+      authenticatorSelection: { userVerification: "preferred" },
+      excludeCredentials,
     });
 
     regChallenges.set(userId, options.challenge);
@@ -112,13 +119,17 @@ router.post('/register-begin', async (req, res) => {
 });
 
 /* ===========================================================
-   2. REGISTER COMPLETE
+    2. REGISTER COMPLETE (verificar attestation)
 =========================================================== */
 router.post('/register-complete', async (req, res) => {
   try {
     const { userId, attestation } = req.body;
 
     const expectedChallenge = regChallenges.get(userId);
+
+    if (!expectedChallenge) {
+      return res.status(400).json({ error: "challenge expirado" });
+    }
 
     const verification = await verifyRegistrationResponse({
       response: attestation,
@@ -127,13 +138,17 @@ router.post('/register-complete', async (req, res) => {
       expectedRPID: RP_ID,
     });
 
-    if (!verification.verified)
+    if (!verification.verified) {
       return res.status(400).json({ verified: false });
+    }
 
-    const { credentialPublicKey, credentialID, counter } =
-      verification.registrationInfo;
+    const {
+      credentialID,
+      credentialPublicKey,
+      counter,
+    } = verification.registrationInfo;
 
-    const credIdBase64 = Buffer.from(credentialID).toString('base64url');
+    const credentialID_b64url = Buffer.from(credentialID).toString("base64url");
 
     await pool.query(
       `INSERT INTO credentials
@@ -144,8 +159,8 @@ router.post('/register-complete', async (req, res) => {
       [
         makeUUID(),
         userId,
-        credIdBase64,
-        credentialPublicKey.toString('base64'),
+        credentialID_b64url,
+        credentialPublicKey.toString("base64"),
         counter,
       ]
     );
@@ -161,38 +176,38 @@ router.post('/register-complete', async (req, res) => {
 });
 
 /* ===========================================================
-   3. AUTH BEGIN
+    3. AUTH BEGIN  (crear challenge)
 =========================================================== */
 router.post('/auth-begin', async (req, res) => {
   try {
     let { username } = req.body;
     username = normalizeUsername(username);
 
-    const result = await pool.query(
-      'SELECT * FROM users WHERE LOWER(username)=LOWER($1)',
+    const user = await pool.query(
+      "SELECT * FROM users WHERE LOWER(username)=LOWER($1)",
       [username]
     );
 
-    if (!result.rows.length)
-      return res.status(404).json({ error: 'user not found' });
+    if (!user.rows.length)
+      return res.status(404).json({ error: "user not found" });
 
-    const userId = result.rows[0].id;
+    const userId = user.rows[0].id;
 
     const rows = await pool.query(
-      'SELECT credential_id FROM credentials WHERE user_id=$1',
+      "SELECT credential_id FROM credentials WHERE user_id=$1",
       [userId]
     );
 
     const allowCredentials = rows.rows.map(r => ({
-      id: Buffer.from(r.credential_id, 'base64url'),
-      type: 'public-key',
+      id: Buffer.from(r.credential_id, "base64url"),
+      type: "public-key",
     }));
 
     const options = generateAuthenticationOptions({
       rpID: RP_ID,
       allowCredentials,
       timeout: 60000,
-      userVerification: 'preferred',
+      userVerification: "preferred",
     });
 
     authChallenges.set(userId, options.challenge);
@@ -200,7 +215,7 @@ router.post('/auth-begin', async (req, res) => {
     return res.json({
       options,
       userId,
-      displayName: result.rows[0].display_name,
+      displayName: user.rows[0].display_name,
     });
 
   } catch (e) {
@@ -210,23 +225,23 @@ router.post('/auth-begin', async (req, res) => {
 });
 
 /* ===========================================================
-   4. AUTH COMPLETE
+    4. AUTH COMPLETE (verificar assertion)
 =========================================================== */
 router.post('/auth-complete', async (req, res) => {
   try {
     const { userId, assertion } = req.body;
 
-    const rows = await pool.query(
-      'SELECT * FROM credentials WHERE user_id=$1 LIMIT 1',
+    const creds = await pool.query(
+      "SELECT * FROM credentials WHERE user_id=$1 LIMIT 1",
       [userId]
     );
 
-    if (!rows.rows.length)
-      return res.status(404).json({ error: 'credential not found' });
+    if (!creds.rows.length)
+      return res.status(404).json({ error: "credential not found" });
 
     const expectedChallenge = authChallenges.get(userId);
 
-    const { sign_count, public_key, credential_id, id } = rows.rows[0];
+    const { sign_count, public_key, credential_id, id } = creds.rows[0];
 
     const verification = await verifyAuthenticationResponse({
       response: assertion,
@@ -234,8 +249,8 @@ router.post('/auth-complete', async (req, res) => {
       expectedOrigin: EXPECTED_ORIGIN,
       expectedRPID: RP_ID,
       authenticator: {
-        credentialID: Buffer.from(credential_id, 'base64url'),
-        credentialPublicKey: Buffer.from(public_key, 'base64'),
+        credentialID: Buffer.from(credential_id, "base64url"),
+        credentialPublicKey: Buffer.from(public_key, "base64"),
         counter: Number(sign_count),
       },
     });
@@ -246,7 +261,7 @@ router.post('/auth-complete', async (req, res) => {
     const newCounter = verification.authenticationInfo.newCounter;
 
     await pool.query(
-      'UPDATE credentials SET sign_count=$1 WHERE id=$2',
+      "UPDATE credentials SET sign_count=$1 WHERE id=$2",
       [newCounter, id]
     );
 
