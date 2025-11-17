@@ -1,7 +1,7 @@
 // ================================================================
 //  ASISTENCIA BACKEND – SERVIDOR EXPRESS (Render.com READY)
 // ================================================================
-
+console.log("🚀 index.js desde GitHub fue cargado correctamente");
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
