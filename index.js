@@ -1,6 +1,3 @@
-// ================================================================
-//  ASISTENCIA BACKEND – SERVIDOR EXPRESS (Render.com READY)
-// ================================================================
 console.log("🚀 index.js desde GitHub fue cargado correctamente");
 
 import 'dotenv/config';
@@ -9,12 +6,15 @@ import cors from 'cors';
 import { initDb } from './models.js';
 import authRouter from './routes/auth.js';
 import markRouter from './routes/mark.js';
-import dbCheckRouter from "./routes/dbcheck.js";  // ✔ importar aquí
+import dbCheckRouter from "./routes/dbcheck.js";  // ✔️ IMPORTANTE
 
-const app = express();  // ✔ app se crea aquí
+const app = express();   // ✔️ PRIMERO SE CREA APP
 
-// JSON
+app.use("/", dbCheckRouter); // ✔️ LUEGO SE MONTA RUTA
+
+// Permitir JSON
 app.use(express.json({ limit: '1mb' }));
+
 
 // RUTA DE PRUEBA DB
 app.use("/", dbCheckRouter);  // ✔ ahora sí se puede usar app
